@@ -1,0 +1,102 @@
+Trigger
+=========================
+trigger Account_Trigger on Account (before insert,after insert, before update) {
+    Account_Trigger_Handler handler = new Account_Trigger_Handler();
+    if(Trigger.isbefore && trigger.isinsert){
+        handler.beforeInsert(Trigger.New);
+    }
+    if(trigger.isafter){
+        handler.CreateTeamMember(trigger.New);
+    }
+    if(trigger.isBefore && Trigger.isUpdate){
+        handler.beforeUpdate(Trigger.New,Trigger.oldMap);
+    }
+}
+
+Handler Class
+=====================================
+public with sharing class Account_Trigger_Handler {
+    public void beforeInsert(List<Account> lstNewAccount){
+        for(Account objAccount:lstNewAccount){
+            objAccount.Active__c = false;
+        }
+    }
+    public void beforeUpdate(List<Account> lstNewAccount,Map<Id,Account> mapAccounts){
+            Set<Id> setAccount = new Set<Id>();
+        for(Account objAccount : lstNewAccount){
+            if(objAccount.Active__c == true && (objAccount.Active__c != mapAccounts.get(objAccount.Id).Active__c)){
+                setAccount.add(objAccount.Id);
+            }
+        }
+        Set<Id> setAccountActive = new Set<Id>();
+        for(SQX_Team_Members__c objTeamMember : [Select Id,Member_Type__c,Account__r.Id from SQX_Team_Members__c
+                                                 where Account__c In:setAccount and
+                                                 (Member_Type__c = 'HR' or Member_Type__c = 'Admin')]){
+            setAccountActive.add(objTeamMember.Account__r.Id);
+        }
+        for(Account objAccount : lstNewAccount){
+            if(!setAccountActive.contains(objAccount.Id) && setAccount.contains(objAccount.Id)){
+               
+                objAccount.addError('Team Mebers are neither Hr or Admin');
+            }
+        }
+    }
+    Public void CreateTeamMember(List<Account> lstNewAccount){
+        list<SQX_Team_Members__c> teamlist = new list<SQX_Team_Members__c>();
+        for(Account objAccount:lstNewAccount){
+            SQX_Team_Members__c objtmember = new SQX_Team_Members__c();
+            objtmember.Account__c = objAccount.id;
+            objtmember.Name = 'Team Member 1';
+            objtmember.Contact_Info__c = '';
+            objtmember.Member_Type__c = '';
+            teamlist.add(objtmember);
+            SQX_Team_Members__c objtmember2 = new SQX_Team_Members__c();
+            objtmember2.Account__c = objAccount.id;
+            objtmember2.Name = 'Team Member 2';
+            objtmember2.Contact_Info__c = '';
+            objtmember2.Member_Type__c = '';
+            teamlist.add(objtmember2);
+        }
+        if(!teamlist.isEmpty()){
+            insert teamlist;
+        }
+       
+    }
+
+}
+
+Test class
+==========================================
+@isTest
+public class Account_Trigger_Handler_Test {
+
+    @testSetup static void setup() {
+        List<Account> testAccts = new List<Account>();
+Account objAcc = new Account();
+        objAcc.name = 'test Acc';
+        objAcc.Active__c = false;
+        testAccts.add(objAcc);
+        insert testAccts;      
+       
+    }
+   
+    @istest
+    static void testMethod1() {
+       
+        Account objAcc = [select id, Active__c from Account limit 1];
+        objAcc.Active__c = true;
+        try{
+            test.startTest();
+            update objAcc;
+            test.stoptest();
+        }
+        catch(exception e){
+            system.debug('==='+e.getMessage());
+        }
+       
+    }
+   
+}
+
+
+
